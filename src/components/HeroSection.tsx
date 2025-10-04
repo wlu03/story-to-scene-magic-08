@@ -1,6 +1,6 @@
 import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import heroImage from "@/assets/hero-storyflow.jpg";
+import heroImage from "@/assets/hero-cartoon.jpg";
 
 interface HeroSectionProps {
   onUploadClick: () => void;
@@ -19,11 +19,11 @@ export const HeroSection = ({ onUploadClick }: HeroSectionProps) => {
 
       {/* Content */}
       <div className="relative z-10 max-w-5xl mx-auto px-6 text-center">
-        <h1 className="text-6xl md:text-7xl font-bold mb-6 bg-gradient-amber bg-clip-text text-transparent animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <h1 className="text-6xl md:text-7xl font-bold mb-6 text-primary animate-in fade-in slide-in-from-bottom-4 duration-700">
           Storyflow Engine
         </h1>
         
-        <p className="text-xl md:text-2xl text-muted-foreground mb-12 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
+        <p className="text-xl md:text-2xl text-foreground mb-12 max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 delay-200">
           Transform your stories into cinematic video experiences. Upload text or PDF, 
           and watch as AI brings your narrative to life with visuals, narration, and interactive scenes.
         </p>
