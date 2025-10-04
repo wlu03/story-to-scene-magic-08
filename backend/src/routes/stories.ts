@@ -103,13 +103,14 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
 /**
  * POST /api/stories/:id/segments/:segmentId/regenerate
- * Regenerate a specific segment
+ * Regenerate a specific segment with optional new prompt
  */
 router.post('/:id/segments/:segmentId/regenerate', async (req: Request, res: Response) => {
   try {
     const { id, segmentId } = req.params;
+    const { prompt } = req.body;
     
-    await storyProcessor.regenerateSegment(id, parseInt(segmentId));
+    await storyProcessor.regenerateSegment(id, parseInt(segmentId), prompt);
     
     res.json({
       success: true,
@@ -119,6 +120,36 @@ router.post('/:id/segments/:segmentId/regenerate', async (req: Request, res: Res
     console.error('Error regenerating segment:', error);
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to regenerate segment',
+    });
+  }
+});
+
+/**
+ * GET /api/stories/:id/style
+ * Get extracted style information for a story
+ */
+router.get('/:id/style', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const story = await fileStorage.loadStoryData(id);
+
+    if (!story) {
+      return res.status(404).json({
+        error: 'Story not found',
+      });
+    }
+
+    if (!story.styleInfo) {
+      return res.status(404).json({
+        error: 'Style information not yet extracted',
+      });
+    }
+
+    res.json(story.styleInfo);
+  } catch (error) {
+    console.error('Error fetching style info:', error);
+    res.status(500).json({
+      error: 'Failed to fetch style information',
     });
   }
 });

@@ -4,10 +4,17 @@ Backend API for the Story to Scene Magic application. Converts story text into v
 
 ## Features
 
-- 🎬 **Gemini Veo 3 Integration** - Generate videos from text prompts
+- 📁 **Local File Storage** - No database required, everything stored in JSON files and local folders
+- 🎬 **Gemini Veo 3 Integration** - Generate videos from text prompts with advanced configuration
 - 📝 **Story Analysis** - AI-powered story segmentation using Gemini Pro
+- 🎨 **Style Extraction** - Automatic extraction of characters, setting, and visual style
 - 🎥 **Video Management** - Generate, store, and stream video content
-- 📊 **Processing Status** - Real-time progress tracking
+- 📊 **Processing Status** - Real-time progress tracking with detailed steps
+
+## Documentation
+
+- 📖 **[Data Flow Diagram](DATA_FLOW.md)** - Complete pipeline visualization
+- 🚀 **[Quick Start Guide](QUICKSTART.md)** - Get up and running fast
 
 ## Tech Stack
 
@@ -181,16 +188,33 @@ await geminiVeo.generateVideo({
 });
 ```
 
-**Note:** The Gemini Veo 3 API implementation is a placeholder. Update the `generateVideoContent()` method in `src/services/geminiVeo.ts` based on the actual Veo 3 API documentation when available.
+**Note:** The Gemini Veo 3 integration is now fully implemented using the official `@google/genai` package. Videos are generated asynchronously with polling, then downloaded and stored locally.
 
 ## Processing Pipeline
 
-1. **Upload** - User uploads .txt or .pdf file
-2. **Parse** - Extract text content from file
-3. **Analyze** - Use Gemini Pro to segment story into scenes
-4. **Generate** - Create videos for each segment using Veo 3
-5. **Store** - Save videos locally and update metadata
-6. **Serve** - Stream videos to frontend
+```
+PDF/TXT Upload
+    ↓
+Parse & Store (data/uploads/)
+    ↓
+Extract Style Info (Gemini Pro)
+  • Characters (name, traits)
+  • Setting (location, time, atmosphere)
+  • Visual Style (art, colors, cinematography)
+    ↓
+Generate Segments (Gemini Pro)
+  • Scene descriptions
+  • Narrations
+  • Detailed video prompts
+    ↓
+Generate Videos (Gemini Veo 3)
+  • For each segment
+  • Stored in data/videos/{storyId}/
+    ↓
+Complete (JSON saved in data/stories/)
+```
+
+**See [DATA_FLOW.md](DATA_FLOW.md) for detailed pipeline visualization.**
 
 ## Development
 

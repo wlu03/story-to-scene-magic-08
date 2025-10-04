@@ -29,6 +29,15 @@ export const config = {
     maxRetries: parseInt(process.env.VEO_MAX_RETRIES || '3'),
     timeout: parseInt(process.env.VEO_TIMEOUT || '300000'), // 5 minutes default
   },
+  
+  segmentation: {
+    // Set to 0 for automatic calculation based on story length
+    // Or set a fixed number (3-12) to override
+    fixedSegmentCount: parseInt(process.env.FIXED_SEGMENT_COUNT || '0'),
+    minSegments: parseInt(process.env.MIN_SEGMENTS || '3'),
+    maxSegments: parseInt(process.env.MAX_SEGMENTS || '12'),
+    wordsPerSegment: parseInt(process.env.WORDS_PER_SEGMENT || '150'),
+  },
 } as const;
 
 // Validation

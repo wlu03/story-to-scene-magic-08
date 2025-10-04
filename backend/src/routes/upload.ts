@@ -70,15 +70,21 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
       originalFilename: file.originalname,
       uploadedAt: new Date().toISOString(),
       status: 'uploaded',
-      progress: 0,
+      progress: 5,
+      currentStep: 'File uploaded successfully',
       textContent: cleanedContent,
       segments: [],
     };
 
-    // Save story data
+    // Save story data to local storage
     await fileStorage.saveStoryData(storyId, storyData);
+    
+    console.log(`\n📄 File uploaded: ${file.originalname}`);
+    console.log(`Story ID: ${storyId}`);
+    console.log(`Content length: ${cleanedContent.length} characters`);
 
-    // Start processing in background
+    // Start processing pipeline in background
+    // Flow: PDF -> Parse -> Extract Style -> Create Segments -> Generate Videos
     storyProcessor.processStory(storyId).catch(error => {
       console.error('Background processing error:', error);
     });

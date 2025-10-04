@@ -1,41 +1,120 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { config } from '@/config';
 import { GeminiVeoRequest, GeminiVeoResponse } from '@/types';
-import fs from 'fs/promises';
+import { fileStorage } from '@/utils/fileStorage';
+import path from 'path';
 
 export class GeminiVeoService {
-  private genAI: GoogleGenerativeAI;
+  private ai: any;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(config.google.apiKey);
+    this.ai = new GoogleGenAI({
+      apiKey: config.google.apiKey,
+    });
   }
 
   /**
    * Generate video using Gemini Veo 3
-   * Note: This is a placeholder implementation. 
-   * The actual Veo 3 API may have different requirements.
    */
-  async generateVideo(request: GeminiVeoRequest): Promise<GeminiVeoResponse> {
+  async generateVideo(
+    request: GeminiVeoRequest,
+    storyId: string,
+    segmentId: number
+  ): Promise<GeminiVeoResponse> {
     try {
-      console.log(`Generating video with Veo 3 for prompt: ${request.prompt.substring(0, 50)}...`);
+      console.log(`\n🎬 Starting Veo 3 video generation for segment ${segmentId}...`);
+      console.log(`Model: ${request.model || 'veo-3.0-generate-001'}`);
+      console.log(`Prompt: ${request.prompt.substring(0, 100)}...`);
 
-      // Initialize the Veo model (adjust model name as needed)
-      // As of now, Veo might be accessed through different endpoints
-      const model = this.genAI.getGenerativeModel({ 
-        model: config.veo.model 
+      // Prepare video generation parameters
+      const params: any = {
+        model: request.model || 'veo-3.0-generate-001',
+        prompt: request.prompt,
+      };
+
+      // Add optional parameters
+      if (request.duration) {
+        params.duration = request.duration;
+      }
+      if (request.aspectRatio) {
+        params.aspectRatio = request.aspectRatio;
+      }
+      if (request.resolution) {
+        params.resolution = request.resolution;
+      }
+      if (request.negativePrompt) {
+        params.negativePrompt = request.negativePrompt;
+      }
+      if (request.personGeneration) {
+        params.personGeneration = request.personGeneration;
+      }
+      if (request.seed) {
+        params.seed = request.seed;
+      }
+      if (request.sampleCount) {
+        params.sampleCount = request.sampleCount;
+      }
+      if (request.image) {
+        params.image = request.image;
+      }
+
+      // Start video generation
+      let operation = await this.ai.models.generateVideos(params);
+      
+      console.log('📹 Video generation started, operation ID:', operation.name);
+
+      // Poll the operation status until the video is ready
+      let pollCount = 0;
+      const maxPolls = 60; // 10 minutes max (10 seconds * 60)
+      
+      while (!operation.done) {
+        pollCount++;
+        
+        if (pollCount > maxPolls) {
+          throw new Error('Video generation timeout after 10 minutes');
+        }
+        
+        console.log(`⏳ Waiting for video generation... (${pollCount * 10}s elapsed)`);
+        await new Promise((resolve) => setTimeout(resolve, 10000)); // Wait 10 seconds
+        
+        // Get updated operation status
+        operation = await this.ai.operations.getVideosOperation({
+          operation: operation,
+        });
+      }
+
+      // Check if generation was successful
+      if (!operation.response || !operation.response.generatedVideos || 
+          operation.response.generatedVideos.length === 0) {
+        throw new Error('Video generation completed but no video was returned');
+      }
+
+      console.log('✅ Video generation completed!');
+
+      // Download the generated video
+      const videoFile = operation.response.generatedVideos[0].video;
+      const videoPath = fileStorage.getVideoPath(storyId, segmentId);
+      
+      // Ensure directory exists
+      await fileStorage.ensureStoryDirectories(storyId);
+      
+      console.log(`💾 Downloading video to: ${videoPath}`);
+      
+      await this.ai.files.download({
+        file: videoFile,
+        downloadPath: videoPath,
       });
 
-      // Generate video content
-      // Note: The actual API call structure depends on Google's Veo 3 implementation
-      const result = await this.generateVideoContent(model, request);
+      console.log('✅ Video downloaded successfully!');
 
       return {
         success: true,
-        videoUrl: result.videoUrl,
-        videoPath: result.videoPath,
+        videoPath: videoPath,
+        videoUrl: `/api/videos/${storyId}/${segmentId}`,
       };
+
     } catch (error) {
-      console.error('Error generating video with Veo 3:', error);
+      console.error('❌ Error generating video with Veo 3:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
@@ -44,94 +123,47 @@ export class GeminiVeoService {
   }
 
   /**
-   * Internal method to handle video generation
-   * This is a placeholder - adjust based on actual Veo 3 API
+   * Generate video with retry logic
    */
-  private async generateVideoContent(
-    model: any,
-    request: GeminiVeoRequest
-  ): Promise<{ videoUrl: string; videoPath: string }> {
-    // Build the generation prompt with parameters
-    const generationConfig = {
-      temperature: 0.9,
-      topP: 0.95,
-      topK: 40,
-      maxOutputTokens: 1024,
-    };
-
-    // Construct video generation prompt
-    const prompt = this.buildVideoPrompt(request);
-
-    try {
-      // Attempt to generate content
-      // Note: Actual Veo API might require different methods
-      const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig,
-      });
-
-      const response = result.response;
-      
-      // Extract video data from response
-      // This structure depends on how Veo returns video data
-      // It might be a URL, base64 data, or file reference
-      
-      // Placeholder implementation:
-      // In a real scenario, you would:
-      // 1. Get the video data/URL from the response
-      // 2. Download the video if needed
-      // 3. Save it locally
-      // 4. Return the local path and public URL
-      
-      const videoData = this.extractVideoData(response);
-      
-      return videoData;
-    } catch (error) {
-      console.error('Video generation failed:', error);
-      throw new Error('Failed to generate video content');
-    }
-  }
-
-  /**
-   * Build optimized prompt for video generation
-   */
-  private buildVideoPrompt(request: GeminiVeoRequest): string {
-    let prompt = `Generate a high-quality video with the following specifications:\n\n`;
-    prompt += `Scene: ${request.prompt}\n\n`;
-    prompt += `Duration: ${request.duration || 10} seconds\n`;
-    prompt += `Aspect Ratio: ${request.aspectRatio || '16:9'}\n\n`;
-    prompt += `Requirements:\n`;
-    prompt += `- Cinematic quality\n`;
-    prompt += `- Smooth motion and transitions\n`;
-    prompt += `- Professional lighting and composition\n`;
-    prompt += `- Coherent scene progression\n`;
-
-    return prompt;
-  }
-
-  /**
-   * Extract video data from Gemini response
-   * Placeholder implementation - adjust based on actual API
-   */
-  private extractVideoData(response: any): { videoUrl: string; videoPath: string } {
-    // This is where you would parse the actual Veo response
-    // and extract video URL or binary data
+  async generateVideoWithRetry(
+    request: GeminiVeoRequest,
+    storyId: string,
+    segmentId: number,
+    maxRetries: number = 3
+  ): Promise<GeminiVeoResponse> {
+    let lastError: string = '';
     
-    // Placeholder return
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      console.log(`\n🔄 Attempt ${attempt} of ${maxRetries}...`);
+      
+      const result = await this.generateVideo(request, storyId, segmentId);
+      
+      if (result.success) {
+        return result;
+      }
+      
+      lastError = result.error || 'Unknown error';
+      
+      if (attempt < maxRetries) {
+        const waitTime = attempt * 5000; // Exponential backoff: 5s, 10s, 15s
+        console.log(`⏳ Waiting ${waitTime / 1000}s before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+    
     return {
-      videoUrl: '/api/videos/placeholder.mp4',
-      videoPath: '/path/to/placeholder.mp4',
+      success: false,
+      error: `Failed after ${maxRetries} attempts. Last error: ${lastError}`,
     };
   }
 
   /**
-   * Check if video generation is available
+   * Check if Veo 3 is available
    */
   async checkAvailability(): Promise<boolean> {
     try {
-      const model = this.genAI.getGenerativeModel({ model: config.veo.model });
-      // Attempt a simple call to verify model availability
-      return true;
+      // Simple test to verify the API is configured correctly
+      return !!this.ai && !!config.google.apiKey;
     } catch (error) {
       console.error('Veo 3 not available:', error);
       return false;
@@ -139,45 +171,42 @@ export class GeminiVeoService {
   }
 
   /**
-   * Get video generation status (for async operations)
+   * Get video generation capabilities
    */
-  async getVideoStatus(jobId: string): Promise<{
-    status: 'pending' | 'processing' | 'completed' | 'failed';
-    progress?: number;
-    videoUrl?: string;
-    error?: string;
-  }> {
-    // Placeholder for async job status checking
-    // Implement based on actual Veo API if it supports async operations
+  getCapabilities() {
     return {
-      status: 'completed',
-      progress: 100,
+      models: ['veo-3.0-generate-001', 'veo-3.0-fast-generate-001'],
+      aspectRatios: ['16:9', '9:16', '1:1'],
+      resolutions: ['720p', '1080p'],
+      maxDuration: 60, // seconds
+      supportedFeatures: [
+        'text-to-video',
+        'image-to-video',
+        'negative-prompts',
+        'seed-control',
+        'person-generation-control',
+      ],
     };
   }
 
   /**
-   * Download video from URL and save locally
+   * Validate video generation request
    */
-  async downloadAndSaveVideo(
-    videoUrl: string,
-    localPath: string
-  ): Promise<void> {
-    try {
-      const response = await fetch(videoUrl);
-      if (!response.ok) {
-        throw new Error(`Failed to download video: ${response.statusText}`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      await fs.writeFile(localPath, buffer);
-      
-      console.log(`Video saved to: ${localPath}`);
-    } catch (error) {
-      console.error('Error downloading video:', error);
-      throw error;
+  validateRequest(request: GeminiVeoRequest): { valid: boolean; error?: string } {
+    if (!request.prompt || request.prompt.trim().length === 0) {
+      return { valid: false, error: 'Prompt is required' };
     }
+
+    if (request.prompt.length > 2000) {
+      return { valid: false, error: 'Prompt must be less than 2000 characters' };
+    }
+
+    if (request.duration && (request.duration < 1 || request.duration > 60)) {
+      return { valid: false, error: 'Duration must be between 1 and 60 seconds' };
+    }
+
+    return { valid: true };
   }
 }
 
 export const geminiVeo = new GeminiVeoService();
-

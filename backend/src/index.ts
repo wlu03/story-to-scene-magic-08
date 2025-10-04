@@ -5,6 +5,7 @@ import { fileStorage } from '@/utils/fileStorage';
 import uploadRoutes from '@/routes/upload';
 import storiesRoutes from '@/routes/stories';
 import videosRoutes from '@/routes/videos';
+import imagesRoutes from '@/routes/images';
 
 // Initialize Express app
 const app: Express = express();
@@ -37,6 +38,7 @@ app.get('/health', (req: Request, res: Response) => {
 app.use('/api', uploadRoutes);
 app.use('/api/stories', storiesRoutes);
 app.use('/api/videos', videosRoutes);
+app.use('/api/images', imagesRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
