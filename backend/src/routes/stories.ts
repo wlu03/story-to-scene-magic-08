@@ -51,7 +51,9 @@ router.get('/:id/status', async (req: Request, res: Response) => {
       status: story.status,
       progress: story.progress,
       currentStep: story.currentStep,
-      segments: story.segments,
+      sections: story.sections,
+      segments: story.segments, // Legacy support
+      styleInfo: story.styleInfo,
       error: story.error,
     };
 
@@ -150,6 +152,72 @@ router.get('/:id/style', async (req: Request, res: Response) => {
     console.error('Error fetching style info:', error);
     res.status(500).json({
       error: 'Failed to fetch style information',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/sections/:sectionId/background
+ * Generate background image for a section
+ */
+router.post('/:id/sections/:sectionId/background', async (req: Request, res: Response) => {
+  try {
+    const { id, sectionId } = req.params;
+    
+    await storyProcessor.generateBackgroundImage(id, parseInt(sectionId));
+    
+    res.json({
+      success: true,
+      message: 'Background image generation started',
+    });
+  } catch (error) {
+    console.error('Error generating background image:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate background image',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/sections/:sectionId/audio
+ * Generate audio for a section
+ */
+router.post('/:id/sections/:sectionId/audio', async (req: Request, res: Response) => {
+  try {
+    const { id, sectionId } = req.params;
+    
+    await storyProcessor.generateAudio(id, parseInt(sectionId));
+    
+    res.json({
+      success: true,
+      message: 'Audio generation started',
+    });
+  } catch (error) {
+    console.error('Error generating audio:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate audio',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/sections/:sectionId/video
+ * Generate video for a section
+ */
+router.post('/:id/sections/:sectionId/video', async (req: Request, res: Response) => {
+  try {
+    const { id, sectionId } = req.params;
+    
+    await storyProcessor.generateVideo(id, parseInt(sectionId));
+    
+    res.json({
+      success: true,
+      message: 'Video generation started',
+    });
+  } catch (error) {
+    console.error('Error generating video:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate video',
     });
   }
 });

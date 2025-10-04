@@ -1,10 +1,12 @@
 import { fileStorage } from '@/utils/fileStorage';
 import { storyAnalyzer } from './storyAnalyzer';
 import { styleExtractor } from './styleExtractor';
-import { geminiVeo } from './geminiVeo';
 import { imageGenerator } from './imageGenerator';
+import { backgroundImageService } from './backgroundImageService';
+import { audioService } from './audioService';
+import { videoService } from './videoService';
 import { config } from '@/config';
-import { StoryData, StorySegment } from '@/types';
+import { StoryData, StorySection } from '@/types';
 
 export class StoryProcessorService {
   /**
@@ -58,126 +60,55 @@ export class StoryProcessorService {
         // Continue without reference image
       }
 
-      // Step 3: Analyze story and create segments with style context
+      // Step 3: Analyze story and create sections with scripts
       await this.updateStoryStatus(storyId, {
-        status: 'generating_segments',
+        status: 'generating_sections',
         progress: 30,
-        currentStep: 'Analyzing story and creating segments...',
+        currentStep: 'Analyzing story and creating sections...',
       });
 
-      console.log('🎭 Analyzing story and creating segments...');
-      const segments = await storyAnalyzer.analyzeStory(story.textContent, styleInfo);
+      console.log('🎭 Analyzing story and creating sections...');
+      const sections = await storyAnalyzer.analyzeStory(story.textContent, styleInfo);
       
-      // Update story with segments
-      story.segments = segments.map(seg => ({
-        ...seg,
+      // Generate clean story name for folder creation
+      const storyName = fileStorage.sanitizeStoryName(story.originalFilename);
+      story.storyName = storyName;
+      
+      // Update story with sections and save scripts
+      story.sections = await Promise.all(sections.map(async (section) => {
+        const sectionName = fileStorage.sanitizeSectionName(section.sectionName);
+        
+        // Save script file only
+        const scriptPath = await fileStorage.saveScript(storyName, sectionName, section.script);
+        
+        return {
+          ...section,
+          status: 'pending' as const,
+          scriptPath,
+        };
+      }));
+      
+      // Keep legacy segments for backward compatibility
+      story.segments = story.sections.map(section => ({
+        ...section,
         status: 'pending' as const,
       }));
+      
       await fileStorage.saveStoryData(storyId, story);
       
-      console.log(`✓ Created ${story.segments.length} segments`);
+      console.log(`✓ Created ${story.sections.length} sections with scripts`);
 
-      // Step 4: Generate videos for each segment using Gemini Veo 3
-      await this.updateStoryStatus(storyId, {
-        status: 'generating_videos',
-        progress: 45,
-        currentStep: 'Generating videos with Gemini Veo 3...',
-      });
-
-      const totalSegments = story.segments.length;
-      console.log(`\n🎥 Generating ${totalSegments} videos...`);
-      
-      // Prepare reference image for video generation
-      let referenceImageBase64: string | undefined;
-      if (story.referenceImagePath) {
-        try {
-          referenceImageBase64 = await imageGenerator.imageToBase64(story.referenceImagePath);
-          console.log('✓ Reference image loaded for video context');
-        } catch (error) {
-          console.warn('⚠️  Could not load reference image:', error);
-        }
-      }
-      
-      for (let i = 0; i < story.segments.length; i++) {
-        const segment = story.segments[i];
-        const progress = 45 + ((i / totalSegments) * 50);
-
-        await this.updateStoryStatus(storyId, {
-          status: 'generating_videos',
-          progress: Math.round(progress),
-          currentStep: `Generating video ${i + 1} of ${totalSegments}: ${segment.caption}`,
-        });
-
-        console.log(`\n📹 Segment ${i + 1}/${totalSegments}: ${segment.caption}`);
-        console.log(`Prompt: ${segment.imagePrompt?.substring(0, 100)}...`);
-
-        // Update segment status
-        segment.status = 'generating';
-        await fileStorage.saveStoryData(storyId, story);
-
-        // Build enhanced prompt with style context
-        const enhancedPrompt = this.buildPromptWithStyleContext(
-          segment,
-          story.styleInfo
-        );
-
-        // Validate prompt before generation
-        const veoRequest: any = {
-          prompt: enhancedPrompt,
-          duration: segment.duration || 10,
-          aspectRatio: '16:9' as const,
-          model: 'veo-3.0-generate-001' as const,
-        };
-
-        // Add reference image if available (image-to-video)
-        if (referenceImageBase64) {
-          veoRequest.image = {
-            imageBytes: referenceImageBase64,
-            mimeType: 'image/png',
-          };
-          console.log('🎨 Using reference image for video context');
-        }
-
-        const validation = geminiVeo.validateRequest(veoRequest);
-        if (!validation.valid) {
-          throw new Error(validation.error);
-        }
-
-        console.log(`📝 Enhanced prompt with style context (${enhancedPrompt.length} chars)`);
-
-        // Generate video using Veo 3 with retry logic
-        const videoResult = await geminiVeo.generateVideoWithRetry(
-          veoRequest,
-          storyId,
-          segment.id,
-          config.veo.maxRetries
-        );
-
-        if (videoResult.success && videoResult.videoPath) {
-          segment.videoPath = videoResult.videoPath;
-          segment.videoUrl = `/api/videos/${storyId}/${segment.id}`;
-          segment.status = 'completed';
-          console.log(`✓ Video generated successfully: ${segment.videoPath}`);
-        } else {
-          segment.status = 'failed';
-          segment.error = videoResult.error || 'Unknown error';
-          console.error(`✗ Video generation failed: ${segment.error}`);
-        }
-
-        await fileStorage.saveStoryData(storyId, story);
-      }
-
-      // Step 5: Mark as completed
+      // Step 4: Mark as completed (sectioning and scripts are done)
       await this.updateStoryStatus(storyId, {
         status: 'completed',
         progress: 100,
-        currentStep: 'All videos generated successfully!',
+        currentStep: 'Story sectioned and scripts created successfully!',
       });
 
-      console.log(`\n✓ Processing complete for story: ${story.originalFilename}`);
-      console.log(`Total segments: ${story.segments.length}`);
-      console.log(`Successful: ${story.segments.filter(s => s.status === 'completed').length}`);
-      console.log(`Failed: ${story.segments.filter(s => s.status === 'failed').length}\n`);
+      console.log(`\n✓ Story processing complete: ${story.originalFilename}`);
+      console.log(`✓ Created ${story.sections.length} sections with scripts`);
+      console.log(`📁 Story folder: ${storyName}`);
+      console.log(`📝 Scripts saved in: data/${storyName}/`);
 
     } catch (error) {
       console.error(`\n✗ Error processing story ${storyId}:`, error);
@@ -190,49 +121,6 @@ export class StoryProcessorService {
     }
   }
 
-  /**
-   * Build enhanced prompt with style context
-   */
-  private buildPromptWithStyleContext(
-    segment: StorySegment,
-    styleInfo?: import('@/types').StoryStyle
-  ): string {
-    let prompt = segment.imagePrompt || segment.sceneDescription;
-
-    // If styleInfo exists, prepend it as context
-    if (styleInfo) {
-      let styleContext = '\n\n[STYLE CONTEXT FOR CONSISTENCY]\n';
-
-      // Add character information
-      if (styleInfo.characters && styleInfo.characters.length > 0) {
-        styleContext += 'Characters:\n';
-        styleInfo.characters.forEach(char => {
-          styleContext += `- ${char.name}: ${char.physicalTraits}\n`;
-        });
-        styleContext += '\n';
-      }
-
-      // Add setting information
-      if (styleInfo.setting) {
-        styleContext += `Setting: ${styleInfo.setting.location}\n`;
-        styleContext += `Time Period: ${styleInfo.setting.timeperiod}\n`;
-        styleContext += `Atmosphere: ${styleInfo.setting.atmosphere}\n\n`;
-      }
-
-      // Add visual style
-      if (styleInfo.visualStyle) {
-        styleContext += `Art Style: ${styleInfo.visualStyle.artStyle}\n`;
-        styleContext += `Color Palette: ${styleInfo.visualStyle.colorPalette}\n`;
-        styleContext += `Cinematography: ${styleInfo.visualStyle.cinematography}\n`;
-      }
-
-      styleContext += '\n[SCENE TO GENERATE]\n';
-
-      prompt = styleContext + prompt;
-    }
-
-    return prompt;
-  }
 
   /**
    * Update story status
@@ -249,88 +137,101 @@ export class StoryProcessorService {
   }
 
   /**
-   * Regenerate a specific segment with optional new prompt
+   * Generate background image for a section
    */
-  async regenerateSegment(
-    storyId: string, 
-    segmentId: number,
-    newPrompt?: string
-  ): Promise<void> {
+  async generateBackgroundImage(storyId: string, sectionId: number): Promise<void> {
+    const story = await fileStorage.loadStoryData(storyId);
+    if (!story || !story.styleInfo) {
+      throw new Error('Story not found or missing style info');
+    }
+
+    const section = story.sections.find(s => s.id === sectionId);
+    if (!section) {
+      throw new Error('Section not found');
+    }
+
+    console.log(`🎨 Generating background image for section: ${section.sectionName}`);
+    
+    try {
+      const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
+      const backgroundImagePath = await backgroundImageService.generateBackgroundImage(
+        section, 
+        storyName, 
+        story.styleInfo
+      );
+      
+      section.backgroundImagePath = backgroundImagePath;
+      await fileStorage.saveStoryData(storyId, story);
+      
+      console.log(`✓ Background image generated: ${backgroundImagePath}`);
+    } catch (error) {
+      console.error(`✗ Background image generation failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate audio for a section
+   */
+  async generateAudio(storyId: string, sectionId: number): Promise<void> {
     const story = await fileStorage.loadStoryData(storyId);
     if (!story) {
       throw new Error('Story not found');
     }
 
-    const segment = story.segments.find(s => s.id === segmentId);
-    if (!segment) {
-      throw new Error('Segment not found');
+    const section = story.sections.find(s => s.id === sectionId);
+    if (!section) {
+      throw new Error('Section not found');
     }
 
-    console.log(`\n🔄 Regenerating segment ${segmentId}: ${segment.caption}`);
-
-    // Update prompt if provided
-    if (newPrompt) {
-      segment.imagePrompt = newPrompt;
-    }
-
-    segment.status = 'generating';
-    await fileStorage.saveStoryData(storyId, story);
-
+    console.log(`🎵 Generating audio for section: ${section.sectionName}`);
+    
     try {
-      // Build enhanced prompt with style context
-      const enhancedPrompt = this.buildPromptWithStyleContext(
-        segment,
-        story.styleInfo
-      );
-
-      const veoRequest: any = {
-        prompt: enhancedPrompt,
-        duration: segment.duration || 10,
-        aspectRatio: '16:9' as const,
-        model: 'veo-3.0-generate-001' as const,
-      };
-
-      // Add reference image if available
-      if (story.referenceImagePath) {
-        try {
-          const referenceImageBase64 = await imageGenerator.imageToBase64(story.referenceImagePath);
-          veoRequest.image = {
-            imageBytes: referenceImageBase64,
-            mimeType: 'image/png',
-          };
-          console.log('🎨 Using reference image for regeneration');
-        } catch (error) {
-          console.warn('⚠️  Could not load reference image for regeneration');
-        }
-      }
-
-      console.log(`📝 Using enhanced prompt with style context (${enhancedPrompt.length} chars)`);
-
-      const videoResult = await geminiVeo.generateVideoWithRetry(
-        veoRequest,
-        storyId,
-        segment.id,
-        config.veo.maxRetries
-      );
-
-      if (videoResult.success && videoResult.videoPath) {
-        segment.videoPath = videoResult.videoPath;
-        segment.videoUrl = `/api/videos/${storyId}/${segment.id}`;
-        segment.status = 'completed';
-        segment.error = undefined;
-        console.log(`✓ Segment regenerated successfully`);
-      } else {
-        segment.status = 'failed';
-        segment.error = videoResult.error || 'Unknown error';
-        console.error(`✗ Regeneration failed: ${segment.error}`);
-      }
+      const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
+      const audioPath = await audioService.generateAudio(section, storyName);
+      
+      // Update section with audio path and narration script path
+      section.audioPath = audioPath;
+      const sectionName = fileStorage.sanitizeSectionName(section.sectionName);
+      section.narrationScriptPath = fileStorage.getNarrationScriptPath(storyName, sectionName);
+      
+      await fileStorage.saveStoryData(storyId, story);
+      
+      console.log(`✓ Audio generated: ${audioPath}`);
     } catch (error) {
-      segment.status = 'failed';
-      segment.error = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`✗ Regeneration error: ${segment.error}`);
+      console.error(`✗ Audio generation failed: ${error}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate video for a section
+   */
+  async generateVideo(storyId: string, sectionId: number): Promise<void> {
+    const story = await fileStorage.loadStoryData(storyId);
+    if (!story || !story.styleInfo) {
+      throw new Error('Story not found or missing style info');
     }
 
-    await fileStorage.saveStoryData(storyId, story);
+    const section = story.sections.find(s => s.id === sectionId);
+    if (!section) {
+      throw new Error('Section not found');
+    }
+
+    console.log(`🎬 Generating video for section: ${section.sectionName}`);
+    
+    try {
+      const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
+      const videoPath = await videoService.generateVideo(section, storyName, story.styleInfo);
+      
+      section.videoPath = videoPath;
+      await fileStorage.saveStoryData(storyId, story);
+      
+      console.log(`✓ Video generated: ${videoPath}`);
+    } catch (error) {
+      console.error(`✗ Video generation failed: ${error}`);
+      throw error;
+    }
   }
 }
 
