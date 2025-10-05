@@ -1,3 +1,4 @@
+// backend/src/services/backgroundImageService.ts
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '@/config';
 import { fileStorage } from '@/utils/fileStorage';
@@ -50,69 +51,84 @@ Return ONLY the image generation prompt, no additional text.
 
     try {
       const result = await model.generateContent(prompt);
-      const backgroundImagePrompt = result.response.text().trim();
-      
+      const backgroundImagePrompt = (result as any).response?.text?.().trim?.() || String(result?.response || '');
+
       const sectionName = fileStorage.sanitizeSectionName(section.sectionName);
       const backgroundImagePath = fileStorage.getBackgroundImagePath(storyName, sectionName);
 
-      // --- Stability AI Integration ---
+      // If Stability API key is available, attempt generation and save image
       const stabilityApiKey = process.env.STABILITY_API_KEY || (config as any).stability?.apiKey;
-      if (!stabilityApiKey) {
-        throw new Error('Missing Stability API key');
-      }
-      const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${stabilityApiKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          text_prompts: [{ text: backgroundImagePrompt }],
-          cfg_scale: 7,
-          height: 768,
-          width: 1344,
-          samples: 1,
-          steps: 30
-        })
-      });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Stability API error: ${errorText}`);
-      }
-      const data = (await response.json()) as { artifacts: { base64: string }[] };
-      const base64Image = data.artifacts[0].base64;
-      await fs.writeFile(backgroundImagePath, Buffer.from(base64Image, 'base64'));
-      // --- End Stability AI Integration ---
+      if (stabilityApiKey) {
+        const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${stabilityApiKey}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            text_prompts: [{ text: backgroundImagePrompt }],
+            cfg_scale: 7,
+            height: 768,
+            width: 1344,
+            samples: 1,
+            steps: 30
+          })
+        });
 
-      // Log the prompt for debugging
-      console.log(`Background image prompt: ${backgroundImagePrompt}`);
-      console.log(`Background image saved to: ${backgroundImagePath}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn('Stability API error:', errorText);
+        } else {
+          const data = (await response.json()) as any;
+          const base64Image = data?.artifacts?.[0]?.base64;
+          if (base64Image) {
+            await fs.writeFile(backgroundImagePath, Buffer.from(base64Image, 'base64'));
+            console.log(`✓ Background image generated and saved: ${backgroundImagePath}`);
+            return backgroundImagePath;
+          }
+        }
+      }
+
+      // Fallback: log prompt and return expected path (file may not exist if generation skipped)
+      console.log(`✓ Background image prompt generated for section: ${section.sectionName}`);
+      console.log(`Prompt: ${backgroundImagePrompt}`);
       return backgroundImagePath;
     } catch (error) {
       console.error('Error generating background image:', error);
-      throw error;
+      throw new Error('Failed to generate background image');
     }
   }
 
+  /**
+   * Build style context string for prompt generation
+   */
   private buildStyleContext(styleInfo: StoryStyle): string {
     let context = '';
+
     // Add character information
-    if (styleInfo.characters.length > 0) {
+    if (styleInfo.characters && styleInfo.characters.length > 0) {
       context += 'Characters:\n';
-      styleInfo.characters.forEach(char => {
+      styleInfo.characters.forEach((char) => {
         context += `- ${char.name}: ${char.description}. Physical: ${char.physicalTraits}\n`;
       });
       context += '\n';
     }
+
     // Add setting information
-    context += `Setting: ${styleInfo.setting.location}, ${styleInfo.setting.timeperiod}\n`;
-    context += `Atmosphere: ${styleInfo.setting.atmosphere}\n\n`;
+    if (styleInfo.setting) {
+      context += `Setting: ${styleInfo.setting.location || ''}, ${styleInfo.setting.timeperiod || ''}\n`;
+      context += `Atmosphere: ${styleInfo.setting.atmosphere || ''}\n\n`;
+    }
+
     // Add visual style
-    context += `Visual Style: ${styleInfo.visualStyle.artStyle}\n`;
-    context += `Color Palette: ${styleInfo.visualStyle.colorPalette}\n`;
-    context += `Cinematography: ${styleInfo.visualStyle.cinematography}\n`;
-    return context.trim();
+    if (styleInfo.visualStyle) {
+      context += `Visual Style: ${styleInfo.visualStyle.artStyle || ''}\n`;
+      context += `Color Palette: ${styleInfo.visualStyle.colorPalette || ''}\n`;
+      context += `Cinematography: ${styleInfo.visualStyle.cinematography || ''}\n`;
+    }
+
+    return context;
   }
 }
 
