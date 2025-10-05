@@ -144,7 +144,9 @@ export class FileStorageService {
    * Get audio file path for a section
    */
   getAudioPath(storyName: string, sectionName: string): string {
-    return path.join(this.getSectionDirectory(storyName, sectionName), 'audio.mp3');
+    // Extract number from section name (e.g., "sample-story_section_1" -> "1")
+    const sectionNumber = sectionName.replace(`${storyName}_section_`, '');
+    return path.join(this.getSectionDirectory(storyName, sectionName), `audio_${sectionNumber}.mp3`);
   }
 
   /**

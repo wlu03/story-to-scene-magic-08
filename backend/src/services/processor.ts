@@ -114,7 +114,7 @@ export class StoryProcessorService {
 
       // Step 4: Generate audio for all sections
       await this.updateStoryStatus(storyId, {
-        status: 'generating_audio',
+        status: 'generating_sections',
         progress: 60,
         currentStep: 'Generating audio for all sections...',
       });
@@ -122,15 +122,13 @@ export class StoryProcessorService {
       console.log('🎵 Generating audio for all sections...');
       try {
         const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
-        await audioService.processSectionsForAudio(story.sections, storyName);
         
-        // Update sections with audio paths
+        // Generate audio for each section
         for (let i = 0; i < story.sections.length; i++) {
           const section = story.sections[i];
-          if (section.audioPath) {
-            // Audio path should be set by the audioService
-            console.log(`✓ Audio generated for section: ${section.sectionName}`);
-          }
+          const audioPath = await audioService.generateAudio(section, storyName);
+          section.audioPath = audioPath;
+          console.log(`✓ Audio generated for section: ${section.sectionName}`);
         }
         
         await fileStorage.saveStoryData(storyId, story);
@@ -178,57 +176,21 @@ export class StoryProcessorService {
   }
 
   /**
-<<<<<<< HEAD
    * Generate background image for a section
-=======
-   * Clean up old sections before creating new ones
    */
-  private async cleanupOldSections(storyName: string): Promise<void> {
-    try {
-      const storyDir = fileStorage.getStoryDirectory(storyName);
-      const fs = await import('fs/promises');
-      
-      // Check if directory exists
-      try {
-        await fs.access(storyDir);
-      } catch {
-        // Directory doesn't exist, nothing to clean up
-        return;
-      }
-      
-      // Remove all existing sections
-      const entries = await fs.readdir(storyDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const sectionPath = `${storyDir}/${entry.name}`;
-          await fs.rm(sectionPath, { recursive: true, force: true });
-          console.log(`🗑️  Cleaned up old section: ${entry.name}`);
-        }
-      }
-    } catch (error) {
-      console.warn('⚠️  Failed to clean up old sections:', error);
-      // Don't fail the entire process if cleanup fails
+  async generateBackgroundImage(storyId: string, sectionId: number): Promise<void> {
+    const story = await fileStorage.loadStoryData(storyId);
+    if (!story || !story.styleInfo) {
+      throw new Error('Story not found or missing style info');
     }
-  }
 
-  /**
-   * Generate background image for a section (COMMENTED OUT - API KEY LIMIT)
->>>>>>> effdf21 (Add automatic audio generation to story processor)
-   */
-  // async generateBackgroundImage(storyId: string, sectionId: number): Promise<void> {
-  //   const story = await fileStorage.loadStoryData(storyId);
-  //   if (!story || !story.styleInfo) {
-  //     throw new Error('Story not found or missing style info');
-  //   }
+    const section = story.sections.find(s => s.id === sectionId);
+    if (!section) {
+      throw new Error('Section not found');
+    }
 
-  //   const section = story.sections.find(s => s.id === sectionId);
-  //   if (!section) {
-  //     throw new Error('Section not found');
-  //   }
-
-  //   console.log(`🎨 Generating background image for section: ${section.sectionName}`);
+    console.log(`🎨 Generating background image for section: ${section.sectionName}`);
     
-<<<<<<< HEAD
     try {
       const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
       const backgroundImagePath = await backgroundImageService.generateBackgroundImage(
@@ -236,26 +198,16 @@ export class StoryProcessorService {
         storyName, 
         story.styleInfo
       );
-=======
-  //   try {
-  //     const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
-  //     const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
-  //       story.textContent!, // full story
-  //       section,
-  //       storyName,
-  //       story.styleInfo
-  //     );
->>>>>>> effdf21 (Add automatic audio generation to story processor)
       
-  //     section.backgroundImagePath = backgroundImagePath;
-  //     await fileStorage.saveStoryData(storyId, story);
+      section.backgroundImagePath = backgroundImagePath;
+      await fileStorage.saveStoryData(storyId, story);
       
-  //     console.log(`✓ Background image generated: ${backgroundImagePath}`);
-  //   } catch (error) {
-  //     console.error(`✗ Background image generation failed: ${error}`);
-  //     throw error;
-  //   }
-  // }
+      console.log(`✓ Background image generated: ${backgroundImagePath}`);
+    } catch (error) {
+      console.error(`✗ Background image generation failed: ${error}`);
+      throw error;
+    }
+  }
 
   /**
    * Generate audio for a section

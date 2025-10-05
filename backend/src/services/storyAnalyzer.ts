@@ -13,7 +13,7 @@ export class StoryAnalyzerService {
   /**
    * Analyze story text and break it into natural video sections with style context
    */
-  async analyzeStory(textContent: string, styleInfo: StoryStyle): Promise<Omit<StorySection, 'status'>[]> {
+  async analyzeStory(textContent: string, styleInfo: StoryStyle, storyName: string): Promise<Omit<StorySection, 'status'>[]> {
     const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
 
     // Build style context for better prompts
@@ -33,19 +33,21 @@ STYLE CONTEXT:
 ${styleContext}
 
 For each section, provide:
-1. A section name (storyname_section_num)
-2. A detailed scene description (storyname_scene_num: what happens in this scene)
-3. The script (storyname_script_num: direct text from the story for this section)
+1. A section name in the format "${storyName}_section_[number]" (e.g., "${storyName}_section_1", "${storyName}_section_2", "${storyName}_section_3")
+2. A detailed scene description (what happens in this scene)
+3. The script (ONLY the direct text from the story for this section - no prefixes or labels)
 
 Format your response as a JSON array with this structure:
 [
   {
-    "sectionName": "storyname_section_num",
-    "sceneDescription": "storyname_scene_num: What happens in this scene",
-    "script": "storyname_script_num: Direct text from the story for this section",
+    "sectionName": "${storyName}_section_1",
+    "sceneDescription": "The story opens with a powerful lion in the jungle, establishing his dominance and the fear he instills in other animals",
+    "script": "Once upon a time, there was a powerful Lion who was the king of the jungle.",
     "duration": 8
   }
 ]
+
+IMPORTANT: The script field should contain ONLY the clean story text, no prefixes like "storyname_script_1:" or any other labels.
 
 Story to analyze:
 ${textContent}
