@@ -71,24 +71,35 @@ export class StoryProcessorService {
         currentStep: 'Analyzing story and creating sections...',
       });
 
-      console.log('🎭 Analyzing story and creating sections...');
-      const sections = await storyAnalyzer.analyzeStory(story.textContent, styleInfo);
-      
       // Generate clean story name for folder creation
       const storyName = fileStorage.sanitizeStoryName(story.originalFilename);
       story.storyName = storyName;
       
-      // Update story with sections and save scripts
+      console.log('🎭 Analyzing story and creating sections...');
+      const sections = await storyAnalyzer.analyzeStory(story.textContent, styleInfo, storyName);
+      
+      // Update story with sections, save scripts, and generate background images
       story.sections = await Promise.all(sections.map(async (section) => {
         const sectionName = fileStorage.sanitizeSectionName(section.sectionName);
-        
-        // Save script file only
+
+        // Add status property for compatibility
+        const sectionWithStatus = { ...section, status: 'pending' as const };
+
+        // Save script file
         const scriptPath = await fileStorage.saveScript(storyName, sectionName, section.script);
-        
+
+        // Generate background image and save path
+        const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
+          story.textContent!,
+          sectionWithStatus,
+          storyName,
+          styleInfo
+        );
+
         return {
-          ...section,
-          status: 'pending' as const,
+          ...sectionWithStatus,
           scriptPath,
+          backgroundImagePath,
         };
       }));
       
@@ -102,11 +113,37 @@ export class StoryProcessorService {
       
       console.log(`✓ Created ${story.sections.length} sections with scripts`);
 
-      // Step 4: Mark as completed (sectioning and scripts are done)
+      // Step 4: Generate audio for all sections
+      await this.updateStoryStatus(storyId, {
+        status: 'generating_sections',
+        progress: 60,
+        currentStep: 'Generating audio for all sections...',
+      });
+
+      console.log('🎵 Generating audio for all sections...');
+      try {
+        const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
+        
+        // Generate audio for each section
+        for (let i = 0; i < story.sections.length; i++) {
+          const section = story.sections[i];
+          const audioPath = await audioService.generateAudio(section, storyName);
+          section.audioPath = audioPath;
+          console.log(`✓ Audio generated for section: ${section.sectionName}`);
+        }
+        
+        await fileStorage.saveStoryData(storyId, story);
+        console.log('✓ Audio generation complete for all sections');
+      } catch (error) {
+        console.warn('⚠️  Audio generation failed, continuing without it:', error);
+        // Continue without audio
+      }
+
+      // Step 5: Mark as completed
       await this.updateStoryStatus(storyId, {
         status: 'completed',
         progress: 100,
-        currentStep: 'Story sectioned and scripts created successfully!',
+        currentStep: 'Story processing complete! Audio generated for all sections.',
       });
 
       console.log(`\n✓ Story processing complete: ${story.originalFilename}`);
@@ -157,7 +194,8 @@ export class StoryProcessorService {
     
     try {
       const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
-      const backgroundImagePath = await backgroundImageService.generateBackgroundImage(
+      const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
+        story.textContent!,
         section, 
         storyName, 
         story.styleInfo

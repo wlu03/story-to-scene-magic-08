@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Generated content (keep directory structure)
+backend/data/stories/*.json
+backend/data/uploads/*
+backend/data/images/*/
+backend/data/videos/*/
+backend/data/sample-story/*/
+
+

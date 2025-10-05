@@ -11,6 +11,12 @@ export const config = {
     apiKey: process.env.GOOGLE_API_KEY || '',
   },
   
+  elevenlabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY || '',
+    voiceId: process.env.ELEVENLABS_VOICE_ID || 'kC1WIuSSgwH2T8iOV4iJ',
+    modelId: process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2',
+  },
+  
   storage: {
     dataDir: process.env.DATA_DIR || path.join(__dirname, '../../data'),
     uploadDir: process.env.UPLOAD_DIR || path.join(__dirname, '../../data/uploads'),

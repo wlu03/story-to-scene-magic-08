@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config } from '@/config';
 import { fileStorage } from '@/utils/fileStorage';
 import { StorySection } from '@/types';
+import fetch from 'node-fetch';
 
 export class AudioService {
   private genAI: GoogleGenerativeAI;
@@ -22,25 +23,16 @@ export class AudioService {
       
       console.log(`🎵 Generating audio for section: ${section.sectionName}`);
       
-      // First, generate the narration script with emotions and effects
-      const narrationScript = await this.generateNarrationScript(section);
+      // Use the regular script directly (no narration script generation)
+      const scriptText = section.script;
       
-      // Save the narration script
-      const narrationScriptPath = await fileStorage.saveNarrationScript(storyName, sectionName, narrationScript);
+      console.log(`Script text: ${scriptText.substring(0, 100)}...`);
       
-      // TODO: Integrate with ElevenLabs API
-      // For now, we'll create a placeholder
-      console.log(`Narration script: ${narrationScript.substring(0, 100)}...`);
+      // Generate audio using ElevenLabs API
+      const audioBuffer = await this.callElevenLabsAPI(scriptText);
+      const audioPath = await fileStorage.saveAudio(storyName, sectionName, audioBuffer);
       
-      // Placeholder for ElevenLabs integration
-      const audioPath = fileStorage.getAudioPath(storyName, sectionName);
-      
-      // TODO: Implement actual ElevenLabs API call
-      // const audioBuffer = await this.callElevenLabsAPI(narrationScript);
-      // await fileStorage.saveAudio(storyName, sectionName, audioBuffer);
-      
-      console.log(`✓ Narration script generated: ${narrationScriptPath}`);
-      console.log(`✓ Audio generation placeholder created: ${audioPath}`);
+      console.log(`✓ Audio generated: ${audioPath}`);
       return audioPath;
     } catch (error) {
       console.error('Error generating audio:', error);
@@ -48,46 +40,39 @@ export class AudioService {
     }
   }
 
-  /**
-   * Generate narration script with emotions and children's story effects
-   */
-  private async generateNarrationScript(section: StorySection): Promise<string> {
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    
-    const prompt = `
-You are a children's story narrator. Transform this script into an enhanced narration script with emotions, expressions, and children's story effects for ElevenLabs.
-
-ORIGINAL SCRIPT:
-${section.script}
-
-Create a narration script that:
-- Includes emotions and expressions in brackets [like this]
-- Has pauses and pacing for children's stories
-- Uses sound effects where appropriate
-- Is engaging and expressive for young audiences
-- Is suitable for text-to-speech conversion
-
-Return ONLY the enhanced narration script, no additional text.
-`;
-
-    try {
-      const result = await model.generateContent(prompt);
-      return result.response.text().trim();
-    } catch (error) {
-      console.error('Error generating narration script:', error);
-      return section.script; // Fallback to original script
-    }
-  }
 
   /**
    * Call ElevenLabs API to generate speech
-   * TODO: Implement actual ElevenLabs integration
    */
-  private async callElevenLabsAPI(narrationScript: string): Promise<Buffer> {
-    // Placeholder for ElevenLabs API integration
-    // This would make an actual API call to ElevenLabs
-    // with the narration script and return the audio buffer
-    throw new Error('ElevenLabs integration not implemented yet');
+  private async callElevenLabsAPI(scriptText: string): Promise<Buffer> {
+    try {
+      const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${config.elevenlabs.voiceId}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'audio/mpeg',
+          'Content-Type': 'application/json',
+          'xi-api-key': config.elevenlabs.apiKey
+        },
+        body: JSON.stringify({
+          text: scriptText,
+          model_id: "eleven_monolingual_v1", // Use cheaper model
+          voice_settings: {
+            stability: 0.5,
+            similarity_boost: 0.5
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`ElevenLabs API error: ${response.status} ${response.statusText}`);
+      }
+
+      const audioBuffer = Buffer.from(await response.arrayBuffer());
+      return audioBuffer;
+    } catch (error) {
+      console.error('ElevenLabs API error:', error);
+      throw new Error('Failed to generate audio with ElevenLabs');
+    }
   }
 }
 
