@@ -56,7 +56,6 @@ Return ONLY the image generation prompt, no additional text.
       const backgroundImagePath = fileStorage.getBackgroundImagePath(storyName, sectionName);
 
       // --- Stability AI Integration ---
-      /*
       const stabilityApiKey = process.env.STABILITY_API_KEY || (config as any).stability?.apiKey;
       if (!stabilityApiKey) {
         throw new Error('Missing Stability API key');
@@ -85,42 +84,19 @@ Return ONLY the image generation prompt, no additional text.
       const base64Image = data.artifacts[0].base64;
       await fs.writeFile(backgroundImagePath, Buffer.from(base64Image, 'base64'));
       // --- End Stability AI Integration ---
-      */
 
       // Log the prompt for debugging
       console.log(`Background image prompt: ${backgroundImagePrompt}`);
-      
-      // For now, return a placeholder path since Stability AI is commented out
-      // In production, this would be the actual generated image path
+      console.log(`Background image saved to: ${backgroundImagePath}`);
       return backgroundImagePath;
     } catch (error) {
       console.error('Error generating background image:', error);
-      throw new Error('Failed to generate background image');
+      throw error;
     }
   }
 
-  /**
-   * Generate background image for a section (simplified version)
-   */
-  async generateBackgroundImage(
-    section: StorySection,
-    storyName: string,
-    styleInfo: StoryStyle
-  ): Promise<string> {
-    const sectionName = fileStorage.sanitizeSectionName(section.sectionName);
-    const backgroundImagePath = fileStorage.getBackgroundImagePath(storyName, sectionName);
-    
-    // For now, just return the path - actual image generation would happen here
-    console.log(`Background image path: ${backgroundImagePath}`);
-    return backgroundImagePath;
-  }
-
-  /**
-   * Build style context string for prompt generation
-   */
   private buildStyleContext(styleInfo: StoryStyle): string {
     let context = '';
-    
     // Add character information
     if (styleInfo.characters.length > 0) {
       context += 'Characters:\n';
@@ -129,17 +105,14 @@ Return ONLY the image generation prompt, no additional text.
       });
       context += '\n';
     }
-    
     // Add setting information
     context += `Setting: ${styleInfo.setting.location}, ${styleInfo.setting.timeperiod}\n`;
     context += `Atmosphere: ${styleInfo.setting.atmosphere}\n\n`;
-    
     // Add visual style
     context += `Visual Style: ${styleInfo.visualStyle.artStyle}\n`;
     context += `Color Palette: ${styleInfo.visualStyle.colorPalette}\n`;
     context += `Cinematography: ${styleInfo.visualStyle.cinematography}\n`;
-    
-    return context;
+    return context.trim();
   }
 }
 

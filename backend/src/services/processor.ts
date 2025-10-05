@@ -89,7 +89,8 @@ export class StoryProcessorService {
         const scriptPath = await fileStorage.saveScript(storyName, sectionName, section.script);
 
         // Generate background image and save path
-        const backgroundImagePath = await backgroundImageService.generateBackgroundImage(
+        const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
+          story.textContent,
           sectionWithStatus,
           storyName,
           styleInfo
