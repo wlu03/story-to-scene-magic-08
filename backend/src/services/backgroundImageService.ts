@@ -70,6 +70,7 @@ Return ONLY the image generation prompt, no additional text.
     }
   }
 
+<<<<<<< HEAD
   /**
    * Build style context string for prompt generation
    */
@@ -97,5 +98,36 @@ Return ONLY the image generation prompt, no additional text.
     return context;
   }
 }
+=======
+      // --- Stability AI Integration ---
+      const stabilityApiKey = process.env.STABILITY_API_KEY || (config as any).stability?.apiKey;
+      if (!stabilityApiKey) {
+        throw new Error('Missing Stability API key');
+      }
+      const response = await fetch('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${stabilityApiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          text_prompts: [{ text: backgroundImagePrompt }],
+          cfg_scale: 7,
+          height: 768,
+          width: 1344,
+          samples: 1,
+          steps: 30
+        })
+      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Stability API error: ${errorText}`);
+      }
+      const data = (await response.json()) as { artifacts: { base64: string }[] };
+      const base64Image = data.artifacts[0].base64;
+      await fs.writeFile(backgroundImagePath, Buffer.from(base64Image, 'base64'));
+      // --- End Stability AI Integration ---
+>>>>>>> b9d9a35 (uncomment code for generating pictures)
 
 export const backgroundImageService = new BackgroundImageService();
