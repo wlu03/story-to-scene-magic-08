@@ -55,7 +55,7 @@ export class AudioService {
         },
         body: JSON.stringify({
           text: scriptText,
-          model_id: config.elevenlabs.modelId,
+          model_id: "eleven_monolingual_v1", // Use cheaper model
           voice_settings: {
             stability: 0.5,
             similarity_boost: 0.5

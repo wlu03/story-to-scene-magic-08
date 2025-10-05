@@ -90,7 +90,7 @@ export class StoryProcessorService {
 
         // Generate background image and save path
         const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
-          story.textContent,
+          story.textContent!,
           sectionWithStatus,
           storyName,
           styleInfo
@@ -194,7 +194,8 @@ export class StoryProcessorService {
     
     try {
       const storyName = story.storyName || fileStorage.sanitizeStoryName(story.originalFilename);
-      const backgroundImagePath = await backgroundImageService.generateBackgroundImage(
+      const backgroundImagePath = await backgroundImageService.generateBackgroundImageForSection(
+        story.textContent!,
         section, 
         storyName, 
         story.styleInfo
