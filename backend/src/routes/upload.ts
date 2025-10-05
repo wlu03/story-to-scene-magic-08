@@ -67,13 +67,15 @@ router.post('/upload', upload.single('file'), async (req: Request, res: Response
     // Create story data
     const storyData: StoryData = {
       id: storyId,
+      storyName: fileStorage.sanitizeStoryName(file.originalname),
       originalFilename: file.originalname,
       uploadedAt: new Date().toISOString(),
       status: 'uploaded',
       progress: 5,
       currentStep: 'File uploaded successfully',
       textContent: cleanedContent,
-      segments: [],
+      sections: [],
+      segments: [], // Legacy support
     };
 
     // Save story data to local storage

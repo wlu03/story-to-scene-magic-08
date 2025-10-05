@@ -1,49 +1,52 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { config } from '@/config';
 import { StoryStyle } from '@/types';
 import fs from 'fs/promises';
 import path from 'path';
 
 export class ImageGeneratorService {
-  private genAI: GoogleGenerativeAI;
+  private ai: any;
 
   constructor() {
-    this.genAI = new GoogleGenerativeAI(config.google.apiKey);
+    this.ai = new GoogleGenAI({
+      apiKey: config.google.apiKey,
+    });
   }
 
   /**
-   * Generate a reference image for style consistency
+   * Generate a reference image for style consistency using Imagen
+   * NOTE: Requires Vertex AI setup - see https://cloud.google.com/vertex-ai/docs/generative-ai/image/overview
    */
   async generateReferenceImage(
     styleInfo: StoryStyle,
     storyId: string
   ): Promise<{ imagePath: string; imageUrl: string }> {
+    console.log('🎨 Generating reference image for style consistency...');
+    
+    // Build a comprehensive prompt for the reference image
+    const prompt = this.buildReferenceImagePrompt(styleInfo);
+    console.log(`Image prompt: ${prompt.substring(0, 150)}...`);
+
+    // Try to generate with Imagen (requires Vertex AI)
     try {
-      console.log('🎨 Generating reference image for style consistency...');
+      const result = await this.ai.models.generateImages({
+        model: 'imagen-3.0-generate-001',
+        prompt: prompt,
+        numberOfImages: 1,
+        aspectRatio: '16:9',
+      });
 
-      // Build a comprehensive prompt for the reference image
-      const prompt = this.buildReferenceImagePrompt(styleInfo);
+      console.log('✓ Image generation completed');
+      const generatedImage = result.generatedImages[0];
       
-      console.log(`Prompt: ${prompt.substring(0, 150)}...`);
-
-      // Use Imagen to generate the reference image
-      const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-      
-      // Generate image using the text-to-image capability
-      // Note: This is a placeholder - adjust based on actual Gemini image generation API
-      const result = await model.generateContent([prompt]);
-      const response = result.response;
-      
-      // Save the image locally
       const imagePath = path.join(config.storage.imagesDir, storyId, 'reference.png');
       const imageDir = path.dirname(imagePath);
-      
-      // Ensure directory exists
       await fs.mkdir(imageDir, { recursive: true });
       
-      // For now, create a placeholder since we need the actual image generation API
-      // In production, you would download the generated image here
-      await fs.writeFile(imagePath, Buffer.from('placeholder'));
+      await this.ai.files.download({
+        file: generatedImage.image,
+        downloadPath: imagePath,
+      });
       
       console.log(`✓ Reference image saved: ${imagePath}`);
 
@@ -51,9 +54,23 @@ export class ImageGeneratorService {
         imagePath,
         imageUrl: `/api/images/${storyId}/reference`,
       };
-    } catch (error) {
-      console.error('Error generating reference image:', error);
-      throw new Error('Failed to generate reference image');
+    } catch (error: any) {
+      // Provide helpful error message
+      const errorMsg = error?.message || 'Unknown error';
+      console.error('❌ Image generation failed:', errorMsg);
+      
+      if (errorMsg.includes('not found') || errorMsg.includes('NOT_FOUND')) {
+        throw new Error(
+          'Imagen not available. This feature requires Google Cloud Vertex AI setup.\n' +
+          'To enable image generation:\n' +
+          '1. Enable Vertex AI API in Google Cloud Console\n' +
+          '2. Set up authentication with service account\n' +
+          '3. Set ENABLE_REFERENCE_IMAGES=true in .env\n' +
+          'See: https://cloud.google.com/vertex-ai/docs/generative-ai/image/overview'
+        );
+      }
+      
+      throw new Error(`Image generation failed: ${errorMsg}`);
     }
   }
 
@@ -61,32 +78,41 @@ export class ImageGeneratorService {
    * Build a comprehensive prompt for the reference image
    */
   private buildReferenceImagePrompt(styleInfo: StoryStyle): string {
-    let prompt = 'Create a reference image showing the main characters and visual style for a story. ';
+    let prompt = 'Character reference sheet showing main characters in a lineup. ';
 
-    // Add characters
-    if (styleInfo.characters && styleInfo.characters.length > 0) {
-      prompt += '\n\nCHARACTERS:\n';
-      styleInfo.characters.forEach((char, idx) => {
-        prompt += `${idx + 1}. ${char.name}: ${char.physicalTraits}\n`;
-      });
-    }
-
-    // Add setting
-    if (styleInfo.setting) {
-      prompt += `\n\nSETTING: ${styleInfo.setting.location}`;
-      prompt += `\nTime Period: ${styleInfo.setting.timeperiod}`;
-      prompt += `\nAtmosphere: ${styleInfo.setting.atmosphere}`;
-    }
-
-    // Add visual style
+    // Add visual style first (most important for Imagen)
     if (styleInfo.visualStyle) {
-      prompt += `\n\nVISUAL STYLE:`;
-      prompt += `\nArt Style: ${styleInfo.visualStyle.artStyle}`;
-      prompt += `\nColor Palette: ${styleInfo.visualStyle.colorPalette}`;
-      prompt += `\nCinematography: ${styleInfo.visualStyle.cinematography}`;
+      prompt += `Art style: ${styleInfo.visualStyle.artStyle}. `;
+      prompt += `Color palette: ${styleInfo.visualStyle.colorPalette}. `;
     }
 
-    prompt += '\n\nCompose this as a character lineup or group shot that clearly shows all characters with consistent styling.';
+    // Add characters with concise descriptions
+    if (styleInfo.characters && styleInfo.characters.length > 0) {
+      prompt += 'Characters standing side by side: ';
+      const charDescriptions = styleInfo.characters
+        .slice(0, 5) // Limit to 5 main characters
+        .map((char, idx) => {
+          // Make description concise for Imagen
+          const traits = char.physicalTraits.length > 100 
+            ? char.physicalTraits.substring(0, 97) + '...'
+            : char.physicalTraits;
+          return `${char.name} (${traits})`;
+        });
+      prompt += charDescriptions.join(', ') + '. ';
+    }
+
+    // Add setting context
+    if (styleInfo.setting) {
+      prompt += `Background: ${styleInfo.setting.location}, ${styleInfo.setting.atmosphere} atmosphere. `;
+    }
+
+    // Add composition instructions
+    prompt += 'Wide shot, all characters visible, clear details, professional character design, consistent style.';
+
+    // Ensure prompt isn't too long for Imagen (limit ~1000 chars)
+    if (prompt.length > 1000) {
+      prompt = prompt.substring(0, 997) + '...';
+    }
 
     return prompt;
   }

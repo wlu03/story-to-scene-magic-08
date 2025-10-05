@@ -104,24 +104,92 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/stories/:id/segments/:segmentId/regenerate
- * Regenerate a specific segment with optional new prompt
+ * POST /api/stories/:id/sections/:sectionId/background
+ * Generate background image for a section
  */
-router.post('/:id/segments/:segmentId/regenerate', async (req: Request, res: Response) => {
+router.post('/:id/sections/:sectionId/background', async (req: Request, res: Response) => {
   try {
-    const { id, segmentId } = req.params;
-    const { prompt } = req.body;
+    const { id, sectionId } = req.params;
     
-    await storyProcessor.regenerateSegment(id, parseInt(segmentId), prompt);
+    await storyProcessor.generateBackgroundImage(id, parseInt(sectionId));
     
     res.json({
       success: true,
-      message: 'Segment regeneration started',
+      message: 'Background image generation started',
     });
   } catch (error) {
-    console.error('Error regenerating segment:', error);
+    console.error('Error generating background image:', error);
     res.status(500).json({
-      error: error instanceof Error ? error.message : 'Failed to regenerate segment',
+      error: error instanceof Error ? error.message : 'Failed to generate background image',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/sections/:sectionId/audio
+ * Generate audio for a section
+ */
+router.post('/:id/sections/:sectionId/audio', async (req: Request, res: Response) => {
+  try {
+    const { id, sectionId } = req.params;
+    
+    await storyProcessor.generateAudio(id, parseInt(sectionId));
+    
+    res.json({
+      success: true,
+      message: 'Audio generation started',
+    });
+  } catch (error) {
+    console.error('Error generating audio:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate audio',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/sections/:sectionId/video
+ * Generate video for a section
+ */
+router.post('/:id/sections/:sectionId/video', async (req: Request, res: Response) => {
+  try {
+    const { id, sectionId } = req.params;
+    
+    await storyProcessor.generateVideo(id, parseInt(sectionId));
+    
+    res.json({
+      success: true,
+      message: 'Video generation started',
+    });
+  } catch (error) {
+    console.error('Error generating video:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to generate video',
+    });
+  }
+});
+
+/**
+ * POST /api/stories/:id/videos/generate-all
+ * Generate videos for all sections in a story
+ */
+router.post('/:id/videos/generate-all', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    // Start generation in background
+    storyProcessor.generateAllVideos(id).catch(error => {
+      console.error('Background video generation error:', error);
+    });
+    
+    res.json({
+      success: true,
+      message: 'Video generation started for all sections',
+    });
+  } catch (error) {
+    console.error('Error starting video generation:', error);
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to start video generation',
     });
   }
 });

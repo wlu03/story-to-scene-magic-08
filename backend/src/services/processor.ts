@@ -40,24 +40,28 @@ export class StoryProcessorService {
         style: styleInfo.visualStyle.artStyle,
       });
 
-      // Step 2: Generate reference image for style consistency
-      await this.updateStoryStatus(storyId, {
-        status: 'generating_reference_image',
-        progress: 20,
-        currentStep: 'Generating reference image for style consistency...',
-      });
+      // Step 2: Generate reference image for style consistency (optional)
+      if (config.features.enableReferenceImages) {
+        await this.updateStoryStatus(storyId, {
+          status: 'generating_reference_image',
+          progress: 20,
+          currentStep: 'Generating reference image for style consistency...',
+        });
 
-      console.log('🎨 Generating reference image...');
-      try {
-        const referenceImage = await imageGenerator.generateReferenceImage(styleInfo, storyId);
-        story.referenceImagePath = referenceImage.imagePath;
-        story.referenceImageUrl = referenceImage.imageUrl;
-        await fileStorage.saveStoryData(storyId, story);
-        
-        console.log('✓ Reference image generated');
-      } catch (error) {
-        console.warn('⚠️  Reference image generation failed, continuing without it:', error);
-        // Continue without reference image
+        console.log('🎨 Generating reference image...');
+        try {
+          const referenceImage = await imageGenerator.generateReferenceImage(styleInfo, storyId);
+          story.referenceImagePath = referenceImage.imagePath;
+          story.referenceImageUrl = referenceImage.imageUrl;
+          await fileStorage.saveStoryData(storyId, story);
+          
+          console.log('✓ Reference image generated');
+        } catch (error) {
+          console.warn('⚠️  Reference image generation failed, continuing without it:', error);
+          // Continue without reference image
+        }
+      } else {
+        console.log('ℹ️  Reference image generation disabled (requires Vertex AI)');
       }
 
       // Step 3: Analyze story and create sections with scripts
@@ -120,7 +124,6 @@ export class StoryProcessorService {
       });
     }
   }
-
 
   /**
    * Update story status
@@ -225,13 +228,66 @@ export class StoryProcessorService {
       const videoPath = await videoService.generateVideo(section, storyName, story.styleInfo);
       
       section.videoPath = videoPath;
+      section.status = 'completed';
       await fileStorage.saveStoryData(storyId, story);
       
       console.log(`✓ Video generated: ${videoPath}`);
     } catch (error) {
+      section.status = 'failed';
+      section.error = error instanceof Error ? error.message : 'Unknown error';
+      await fileStorage.saveStoryData(storyId, story);
       console.error(`✗ Video generation failed: ${error}`);
       throw error;
     }
+  }
+
+  /**
+   * Generate videos for all sections in a story
+   */
+  async generateAllVideos(storyId: string): Promise<void> {
+    const story = await fileStorage.loadStoryData(storyId);
+    if (!story || !story.styleInfo) {
+      throw new Error('Story not found or missing style info');
+    }
+
+    console.log(`\n🎬 Starting video generation for all ${story.sections.length} sections...`);
+    console.log(`Story: ${story.originalFilename}`);
+    console.log(`Story ID: ${storyId}\n`);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < story.sections.length; i++) {
+      const section = story.sections[i];
+      
+      // Skip if already completed
+      if (section.status === 'completed' && section.videoPath) {
+        console.log(`⏭️  Section ${section.id}/${story.sections.length}: ${section.sectionName} - Already completed`);
+        successCount++;
+        continue;
+      }
+
+      console.log(`\n📹 Section ${section.id}/${story.sections.length}: ${section.sectionName}`);
+      
+      try {
+        await this.generateVideo(storyId, section.id);
+        successCount++;
+        console.log(`✅ Section ${section.id} completed (${successCount}/${story.sections.length} done)`);
+      } catch (error) {
+        failCount++;
+        console.error(`❌ Section ${section.id} failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        // Continue to next section even if one fails
+      }
+
+      // Add a small delay between sections to avoid rate limiting
+      if (i < story.sections.length - 1) {
+        console.log('⏳ Waiting 2s before next section...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    console.log(`\n✅ Video generation complete!`);
+    console.log(`📊 Results: ${successCount} successful, ${failCount} failed, ${story.sections.length} total`);
   }
 }
 

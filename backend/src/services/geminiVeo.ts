@@ -3,6 +3,7 @@ import { config } from '@/config';
 import { GeminiVeoRequest, GeminiVeoResponse } from '@/types';
 import { fileStorage } from '@/utils/fileStorage';
 import path from 'path';
+import fs from 'fs/promises';
 
 export class GeminiVeoService {
   private ai: any;
@@ -93,10 +94,11 @@ export class GeminiVeoService {
 
       // Download the generated video
       const videoFile = operation.response.generatedVideos[0].video;
-      const videoPath = fileStorage.getVideoPath(storyId, segmentId);
+      const videoPath = fileStorage.getVideoPathLegacy(storyId, Number(segmentId));
       
       // Ensure directory exists
-      await fileStorage.ensureStoryDirectories(storyId);
+      const dir = path.dirname(videoPath);
+      await fs.mkdir(dir, { recursive: true });
       
       console.log(`💾 Downloading video to: ${videoPath}`);
       
@@ -197,8 +199,8 @@ export class GeminiVeoService {
       return { valid: false, error: 'Prompt is required' };
     }
 
-    if (request.prompt.length > 2000) {
-      return { valid: false, error: 'Prompt must be less than 2000 characters' };
+    if (request.prompt.length > 4000) {
+      return { valid: false, error: 'Prompt must be less than 4000 characters' };
     }
 
     if (request.duration && (request.duration < 1 || request.duration > 60)) {

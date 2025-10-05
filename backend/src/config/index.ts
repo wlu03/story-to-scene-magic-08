@@ -38,6 +38,10 @@ export const config = {
     maxSegments: parseInt(process.env.MAX_SEGMENTS || '12'),
     wordsPerSegment: parseInt(process.env.WORDS_PER_SEGMENT || '150'),
   },
+  features: {
+    // Enable reference image generation (requires Vertex AI setup)
+    enableReferenceImages: process.env.ENABLE_REFERENCE_IMAGES === 'true',
+  },
 } as const;
 
 // Validation

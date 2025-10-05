@@ -44,8 +44,10 @@ export class VideoService {
       );
 
       if (videoResult.success && videoResult.videoPath) {
-        // Save video to new folder structure
-        const videoPath = await fileStorage.saveVideo(storyName, sectionName, Buffer.from(videoResult.videoPath));
+        // Copy video from legacy location to new folder structure
+        const fs = await import('fs/promises');
+        const videoData = await fs.readFile(videoResult.videoPath);
+        const videoPath = await fileStorage.saveVideo(storyName, sectionName, videoData);
         console.log(`✓ Video generated successfully: ${videoPath}`);
         return videoPath;
       } else {
